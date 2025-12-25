@@ -43,11 +43,12 @@ ${jobDescription}
 
   return extractJSON(rawText);
 }
+
 export async function generateInterviewQuestions(
   jobDescription: string
 ) {
   const model = genAI.getGenerativeModel({
-    model: "gemini-1.0-pro",
+    model: "gemini-2.5-flash",
   });
 
   const prompt = `
@@ -74,4 +75,36 @@ ${jobDescription}
 
   const result = await model.generateContent(prompt);
   return result.response.text();
+}
+
+export async function evaluateAnswer(
+  question: string,
+  answer: string
+) {
+  const model = genAI.getGenerativeModel({
+    model: "gemini-2.5-flash",
+  });
+
+  const prompt = `
+You are an interview coach.
+
+Evaluate the ANSWER to the QUESTION.
+Return ONLY valid JSON.
+
+Format:
+{
+  "score": number (1-10),
+  "feedback": "clear constructive feedback",
+  "improvedAnswer": "better version of the answer"
+}
+
+QUESTION:
+${question}
+
+ANSWER:
+${answer}
+`;
+
+  const result = await model.generateContent(prompt);
+  return extractJSON(result.response.text());
 }

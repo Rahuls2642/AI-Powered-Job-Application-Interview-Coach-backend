@@ -1,15 +1,15 @@
 import { Router } from "express";
+import { authMiddleware } from "../middleware/auth.middleware.js";
+import {
+  submitAnswer,
+  getAnswersByQuestion,
+} from "../controllers/answers.controller.js";
 
 const router = Router();
 
-// submit answer
-router.post("/", (req, res) => {
-  res.json({ message: "Submit answer" });
-});
+router.use(authMiddleware);
 
-// get answers for a question
-router.get("/question/:questionId", (req, res) => {
-  res.json({ message: "Get answers" });
-});
+router.post("/", submitAnswer);
+router.get("/question/:questionId", getAnswersByQuestion);
 
 export default router;

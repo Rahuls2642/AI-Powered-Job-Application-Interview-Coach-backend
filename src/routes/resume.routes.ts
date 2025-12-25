@@ -1,9 +1,19 @@
 import { Router } from "express";
-import { saveResume, getResumes } from "../controllers/resume.controller.js";
+import { authMiddleware } from "../middleware/auth.middleware.js"
+import { upload } from "../middleware/upload.middleware.js";
+import {
+  uploadResume,
+  getResumes,
+} from "../controllers/resume.controller.js";
 
 const router = Router();
 
-router.post("/", saveResume);
+router.use(authMiddleware);
+
+// PDF upload
+router.post("/upload", upload.single("resume"), uploadResume);
+
+// Get resume versions
 router.get("/", getResumes);
 
 export default router;

@@ -35,3 +35,28 @@ export const interviewQuestions = pgTable("interview_questions", {
 
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+export const answers = pgTable("answers", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull(),
+  questionId: uuid("question_id").notNull(),
+
+  answer: text("answer").notNull(),
+  feedback: text("feedback").notNull(),
+  improvedAnswer: text("improved_answer").notNull(),
+  score: integer("score").notNull(),
+
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+
+export const resumes = pgTable("resumes", {
+  id: uuid("id").defaultRandom().primaryKey(),
+
+  userId: uuid("user_id").notNull(),
+
+  // extracted resume text (from PDF)
+  content: text("content").notNull(),
+
+  createdAt: timestamp("created_at").defaultNow(),
+});
