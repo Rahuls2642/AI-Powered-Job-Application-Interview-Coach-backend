@@ -40,6 +40,7 @@ export const generateQuestions = async (req: Request, res: Response) => {
 
   const rawText = await generateInterviewQuestions(job.description);
   const parsed = parseQuestions(rawText);
+  
 
   const saved = await db
     .insert(interviewQuestions)

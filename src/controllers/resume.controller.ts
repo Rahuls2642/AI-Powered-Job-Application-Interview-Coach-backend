@@ -2,10 +2,9 @@ import { Request, Response } from "express";
 import { db } from "../db/index.js";
 import { resumes } from "../db/schema.js";
 
-// 👇 Add the missing import for 'eq'
+
 import { eq } from "drizzle-orm";
 
-// 👇 import CommonJS helper
 import parsePdf from "../utils/pdfParse.cjs";
 
 export const uploadResume = async (req: Request, res: Response) => {
