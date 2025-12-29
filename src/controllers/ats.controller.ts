@@ -3,6 +3,10 @@ import { db } from "../db/index.js";
 import { jobs, resumes, atsAnalysis } from "../db/schema.js";
 import { eq, desc } from "drizzle-orm";
 import { analyzeResumeWithJD } from "../services/ai.services.js";
+import { redis } from "../lib/redis.js";
+
+const atsCacheKey = (userId: string, jobId: string, resumeId: string) =>
+  `ats:analysis:${userId}:${jobId}:${resumeId}`;
 
 export const analyzeATS = async (req: Request, res: Response) => {
   if (!req.user) {
@@ -16,7 +20,6 @@ export const analyzeATS = async (req: Request, res: Response) => {
     return res.status(400).json({ error: "jobId is required" });
   }
 
-  // 1️⃣ Get job
   const [job] = await db
     .select()
     .from(jobs)
@@ -26,7 +29,6 @@ export const analyzeATS = async (req: Request, res: Response) => {
     return res.status(404).json({ error: "Job not found" });
   }
 
-  // 2️⃣ Get latest resume
   const [resume] = await db
     .select()
     .from(resumes)
@@ -35,18 +37,26 @@ export const analyzeATS = async (req: Request, res: Response) => {
     .limit(1);
 
   if (!resume) {
-    return res
-      .status(400)
-      .json({ error: "No resume uploaded" });
+    return res.status(400).json({ error: "No resume uploaded" });
   }
 
-  // 3️⃣ Run AI
+  const cacheKey = atsCacheKey(userId, jobId, resume.id);
+
+  try {
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      console.log("⚡ ATS cache HIT");
+      return res.json(JSON.parse(cached));
+    }
+  } catch {
+    console.log("⚡ ATS cache MISS");
+  }
+
   const result = await analyzeResumeWithJD(
     resume.content,
     job.description
   );
 
-  // 4️⃣ Save ATS result
   const [saved] = await db
     .insert(atsAnalysis)
     .values({
@@ -60,10 +70,17 @@ export const analyzeATS = async (req: Request, res: Response) => {
     })
     .returning();
 
-  // 5️⃣ Return result
-  res.json({
+  const response = {
     matchScore: saved.matchScore,
     missingKeywords: saved.missingKeywords,
     suggestions: saved.suggestions,
-  });
+  };
+
+  try {
+    await redis.set(cacheKey, JSON.stringify(response), {
+      EX: 60 * 60 * 24, // 24 hours
+    });
+  } catch {}
+
+  res.json(response);
 };

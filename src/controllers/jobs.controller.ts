@@ -3,7 +3,6 @@ import { eq, and } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { jobs } from "../db/schema.js";
 
-/* CREATE */
 export const createJob = async (req: Request, res: Response) => {
   const userId = req.user.id;
   const { company, role, description } = req.body;
@@ -16,7 +15,6 @@ export const createJob = async (req: Request, res: Response) => {
   res.status(201).json(job);
 };
 
-/* READ ALL */
 export const getJobs = async (req: Request, res: Response) => {
   const userId = req.user.id;
 
@@ -28,7 +26,6 @@ export const getJobs = async (req: Request, res: Response) => {
   res.json(data);
 };
 
-/* READ ONE */
 export const getJobById = async (req: Request, res: Response) => {
   const userId = req.user.id;
   const { jobId } = req.params;
@@ -43,7 +40,6 @@ export const getJobById = async (req: Request, res: Response) => {
   res.json(job);
 };
 
-/* UPDATE */
 export const updateJob = async (req: Request, res: Response) => {
   const userId = req.user.id;
   const { jobId } = req.params;
@@ -59,7 +55,6 @@ export const updateJob = async (req: Request, res: Response) => {
   res.json(job);
 };
 
-/* DELETE */
 export const deleteJob = async (req: Request, res: Response) => {
   const userId = req.user.id;
   const { jobId } = req.params;

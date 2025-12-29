@@ -2,6 +2,12 @@ import { Request, Response } from "express";
 import { db } from "../db/index.js";
 import { jobs, atsAnalysis, answers } from "../db/schema.js";
 import { eq } from "drizzle-orm";
+import { redis } from "../lib/redis.js";
+
+
+const overviewKey = (userId: string) => `report:overview:${userId}`;
+const weakAreasKey = (userId: string) => `report:weak-areas:${userId}`;
+
 
 export const getOverviewReport = async (req: Request, res: Response) => {
   if (!req.user) {
@@ -9,6 +15,15 @@ export const getOverviewReport = async (req: Request, res: Response) => {
   }
 
   const userId = req.user.id;
+  const cacheKey = overviewKey(userId);
+
+  try {
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      console.log("⚡ overview cache HIT");
+      return res.json(JSON.parse(cached));
+    }
+  } catch {}
 
   const allJobs = await db
     .select()
@@ -26,7 +41,8 @@ export const getOverviewReport = async (req: Request, res: Response) => {
     .where(eq(answers.userId, userId));
 
   const jobStatusCount = allJobs.reduce<Record<string, number>>((acc, job) => {
-    acc[job.status ?? "unknown"] = (acc[job.status ?? "unknown"] || 0) + 1;
+    const status = job.status ?? "unknown";
+    acc[status] = (acc[status] || 0) + 1;
     return acc;
   }, {});
 
@@ -45,16 +61,24 @@ export const getOverviewReport = async (req: Request, res: Response) => {
             allAnswers.length
         );
 
-  res.json({
+  const result = {
     totalJobs: allJobs.length,
     jobsByStatus: jobStatusCount,
     averageATSScore: avgATS,
     averageInterviewScore: avgInterviewScore,
     answersPracticed: allAnswers.length,
-  });
+  };
+
+  try {
+    await redis.set(cacheKey, JSON.stringify(result), {
+      EX: 60, // 1 minute
+    });
+  } catch {}
+
+  res.json(result);
 };
 
-//ATS progress
+
 export const getATSProgress = async (req: Request, res: Response) => {
   if (!req.user) {
     return res.status(401).json({ error: "Unauthorized" });
@@ -74,13 +98,22 @@ export const getATSProgress = async (req: Request, res: Response) => {
   res.json(data);
 };
 
-//WEAK Areas
+
 export const getWeakAreas = async (req: Request, res: Response) => {
   if (!req.user) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
   const userId = req.user.id;
+  const cacheKey = weakAreasKey(userId);
+
+  try {
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      console.log("⚡ weak areas cache HIT");
+      return res.json(JSON.parse(cached));
+    }
+  } catch {}
 
   const ats = await db
     .select()
@@ -93,14 +126,22 @@ export const getWeakAreas = async (req: Request, res: Response) => {
     if (!a.missingKeywords) return;
     a.missingKeywords.split(",").forEach(k => {
       const key = k.trim().toLowerCase();
+      if (!key) return;
       keywordFrequency[key] = (keywordFrequency[key] || 0) + 1;
     });
   });
 
-  const sorted = Object.entries(keywordFrequency)
+  const result = Object.entries(keywordFrequency)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
     .map(([skill, count]) => ({ skill, count }));
 
-  res.json(sorted);
+  
+  try {
+    await redis.set(cacheKey, JSON.stringify(result), {
+      EX: 300, 
+    });
+  } catch {}
+
+  res.json(result);
 };
