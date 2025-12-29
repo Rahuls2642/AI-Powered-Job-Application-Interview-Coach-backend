@@ -5,7 +5,7 @@ import { eq, and } from "drizzle-orm";
 import { generateInterviewQuestions } from "../services/ai.services.js";
 import { redis } from "../lib/redis.js";
 
-/* ---------------- Utilities ---------------- */
+
 
 function parseQuestions(text: string) {
   const lines = text.split("\n");
@@ -20,7 +20,7 @@ function parseQuestions(text: string) {
     else if (upper.includes("TECHNICAL")) currentCategory = "technical";
     else if (upper.includes("BEHAVIORAL")) currentCategory = "behavioral";
 
-    // handle -, •, 1., Q1:
+ 
     const cleaned = line.replace(/^[-•\d.\sQ:]+/i, "").trim();
 
     if (cleaned.length > 10) {
@@ -37,19 +37,14 @@ function parseQuestions(text: string) {
 const interviewCacheKey = (userId: string, jobId: string) =>
   `interview:questions:${userId}:${jobId}`;
 
-/* ---------------- Controllers ---------------- */
 
-/**
- * POST /interviews/generate/:jobId
- * Always regenerates interview questions
- */
 export const generateQuestions = async (req: Request, res: Response) => {
   try {
     const userId = req.user.id;
     const { jobId } = req.params;
     const cacheKey = interviewCacheKey(userId, jobId);
 
-    // 1️⃣ Verify job ownership
+    
     const [job] = await db
       .select()
       .from(jobs)
@@ -59,7 +54,6 @@ export const generateQuestions = async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Job not found" });
     }
 
-    // 2️⃣ Clear old questions + cache (CRITICAL FIX)
     await db
       .delete(interviewQuestions)
       .where(
@@ -71,7 +65,6 @@ export const generateQuestions = async (req: Request, res: Response) => {
 
     await redis.del(cacheKey);
 
-    // 3️⃣ Generate fresh questions
     const rawText = await generateInterviewQuestions(job.description);
     const parsed = parseQuestions(rawText);
 
@@ -81,7 +74,6 @@ export const generateQuestions = async (req: Request, res: Response) => {
         .json({ error: "AI returned no valid questions" });
     }
 
-    // 4️⃣ Save to DB
     const saved = await db
       .insert(interviewQuestions)
       .values(
@@ -94,7 +86,6 @@ export const generateQuestions = async (req: Request, res: Response) => {
       )
       .returning();
 
-    // 5️⃣ Cache result for reads
     await redis.set(cacheKey, JSON.stringify(saved), {
       EX: 60 * 60 * 24,
     });
@@ -106,23 +97,20 @@ export const generateQuestions = async (req: Request, res: Response) => {
   }
 };
 
-/**
- * GET /interviews/:jobId
- * Fast read using Redis
- */
+
 export const getQuestions = async (req: Request, res: Response) => {
   try {
     const userId = req.user.id;
     const { jobId } = req.params;
     const cacheKey = interviewCacheKey(userId, jobId);
 
-    // 1️⃣ Redis read
+    
     const cached = await redis.get(cacheKey);
     if (cached) {
       return res.json(JSON.parse(cached));
     }
 
-    // 2️⃣ DB read
+  
     const data = await db
       .select()
       .from(interviewQuestions)
@@ -133,7 +121,7 @@ export const getQuestions = async (req: Request, res: Response) => {
         )
       );
 
-    // 3️⃣ Cache for next time
+    
     await redis.set(cacheKey, JSON.stringify(data), {
       EX: 60 * 60 * 24,
     });
