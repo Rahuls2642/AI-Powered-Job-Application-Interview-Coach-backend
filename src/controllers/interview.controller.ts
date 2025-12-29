@@ -5,24 +5,28 @@ import { eq, and } from "drizzle-orm";
 import { generateInterviewQuestions } from "../services/ai.services.js";
 import { redis } from "../lib/redis.js";
 
-
+/* ---------------- Utilities ---------------- */
 
 function parseQuestions(text: string) {
   const lines = text.split("\n");
   const result: { question: string; category: string }[] = [];
 
-  let currentCategory = "";
+  let currentCategory = "general";
 
   for (const line of lines) {
-    if (line.toUpperCase().includes("HR")) currentCategory = "hr";
-    else if (line.toUpperCase().includes("TECHNICAL"))
-      currentCategory = "technical";
-    else if (line.toUpperCase().includes("BEHAVIORAL"))
-      currentCategory = "behavioral";
-    else if (line.trim().startsWith("-")) {
+    const upper = line.toUpperCase();
+
+    if (upper.includes("HR")) currentCategory = "hr";
+    else if (upper.includes("TECHNICAL")) currentCategory = "technical";
+    else if (upper.includes("BEHAVIORAL")) currentCategory = "behavioral";
+
+    // handle -, •, 1., Q1:
+    const cleaned = line.replace(/^[-•\d.\sQ:]+/i, "").trim();
+
+    if (cleaned.length > 10) {
       result.push({
-        category: currentCategory || "general",
-        question: line.replace("-", "").trim(),
+        category: currentCategory,
+        question: cleaned,
       });
     }
   }
@@ -33,97 +37,110 @@ function parseQuestions(text: string) {
 const interviewCacheKey = (userId: string, jobId: string) =>
   `interview:questions:${userId}:${jobId}`;
 
+/* ---------------- Controllers ---------------- */
 
-
+/**
+ * POST /interviews/generate/:jobId
+ * Always regenerates interview questions
+ */
 export const generateQuestions = async (req: Request, res: Response) => {
-  const userId = req.user.id;
-  const { jobId } = req.params;
-  const cacheKey = interviewCacheKey(userId, jobId);
-
-
   try {
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      console.log("⚡ Interview questions cache HIT");
-      return res.json(JSON.parse(cached));
+    const userId = req.user.id;
+    const { jobId } = req.params;
+    const cacheKey = interviewCacheKey(userId, jobId);
+
+    // 1️⃣ Verify job ownership
+    const [job] = await db
+      .select()
+      .from(jobs)
+      .where(and(eq(jobs.id, jobId), eq(jobs.userId, userId)));
+
+    if (!job) {
+      return res.status(404).json({ error: "Job not found" });
     }
-  } catch {
-    console.log("⚡ Interview questions cache MISS");
-  }
 
-  
-  const [job] = await db
-    .select()
-    .from(jobs)
-    .where(and(eq(jobs.id, jobId), eq(jobs.userId, userId)));
+    // 2️⃣ Clear old questions + cache (CRITICAL FIX)
+    await db
+      .delete(interviewQuestions)
+      .where(
+        and(
+          eq(interviewQuestions.jobId, jobId),
+          eq(interviewQuestions.userId, userId)
+        )
+      );
 
-  if (!job) {
-    return res.status(404).json({ error: "Job not found" });
-  }
+    await redis.del(cacheKey);
 
+    // 3️⃣ Generate fresh questions
+    const rawText = await generateInterviewQuestions(job.description);
+    const parsed = parseQuestions(rawText);
 
-  const rawText = await generateInterviewQuestions(job.description);
-  const parsed = parseQuestions(rawText);
+    if (parsed.length === 0) {
+      return res
+        .status(500)
+        .json({ error: "AI returned no valid questions" });
+    }
 
-  if (parsed.length === 0) {
-    return res.status(500).json({ error: "Failed to generate questions" });
-  }
+    // 4️⃣ Save to DB
+    const saved = await db
+      .insert(interviewQuestions)
+      .values(
+        parsed.map(q => ({
+          userId,
+          jobId,
+          question: q.question,
+          category: q.category,
+        }))
+      )
+      .returning();
 
-  const saved = await db
-    .insert(interviewQuestions)
-    .values(
-      parsed.map(q => ({
-        userId,
-        jobId,
-        question: q.question,
-        category: q.category,
-      }))
-    )
-    .returning();
-
-
-  try {
+    // 5️⃣ Cache result for reads
     await redis.set(cacheKey, JSON.stringify(saved), {
       EX: 60 * 60 * 24,
     });
-  } catch {}
 
-  res.json(saved);
+    return res.json(saved);
+  } catch (err) {
+    console.error("Interview generation failed:", err);
+    return res.status(500).json({ error: "Failed to generate questions" });
+  }
 };
 
-
-
+/**
+ * GET /interviews/:jobId
+ * Fast read using Redis
+ */
 export const getQuestions = async (req: Request, res: Response) => {
-  const userId = req.user.id;
-  const { jobId } = req.params;
-  const cacheKey = interviewCacheKey(userId, jobId);
-
- 
   try {
+    const userId = req.user.id;
+    const { jobId } = req.params;
+    const cacheKey = interviewCacheKey(userId, jobId);
+
+    // 1️⃣ Redis read
     const cached = await redis.get(cacheKey);
     if (cached) {
-      console.log("⚡ Interview questions cache HIT (read)");
       return res.json(JSON.parse(cached));
     }
-  } catch {}
 
- 
-  const data = await db
-    .select()
-    .from(interviewQuestions)
-    .where(
-      and(
-        eq(interviewQuestions.jobId, jobId),
-        eq(interviewQuestions.userId, userId)
-      )
-    );
+    // 2️⃣ DB read
+    const data = await db
+      .select()
+      .from(interviewQuestions)
+      .where(
+        and(
+          eq(interviewQuestions.jobId, jobId),
+          eq(interviewQuestions.userId, userId)
+        )
+      );
 
-
-  try {
+    // 3️⃣ Cache for next time
     await redis.set(cacheKey, JSON.stringify(data), {
       EX: 60 * 60 * 24,
     });
-  } catch {}
 
-  res.json(data);
+    return res.json(data);
+  } catch (err) {
+    console.error("Fetch interview questions failed:", err);
+    return res.status(500).json({ error: "Failed to load questions" });
+  }
 };
