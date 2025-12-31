@@ -1,14 +1,14 @@
 import express from "express";
 import cors from "cors";
 
-import healthRoutes from './src/routes/health.routes';
-import authRoutes from './src/routes/auth.routes';
-import jobsRoutes from './src/routes/jobs.routes';
-import resumeRoutes from './src/routes/resume.routes';
-import atsRoutes from './src/routes/ats.routes';
-import interviewRoutes from './src/routes/interview.routes';    
-import answersRoutes from './src/routes/answer.routes';  
-import reportsRoutes from './src/routes/report.routes';  
+import healthRoutes from './routes/health.routes.js';
+import authRoutes from './routes/auth.routes.js';
+import jobsRoutes from './routes/jobs.routes.js';
+import resumeRoutes from './routes/resume.routes.js';
+import atsRoutes from './routes/ats.routes.js';
+import interviewRoutes from './routes/interview.routes.js';    
+import answersRoutes from './routes/answer.routes.js';  
+import reportsRoutes from './routes/report.routes.js';  
 
 
 const app = express();
