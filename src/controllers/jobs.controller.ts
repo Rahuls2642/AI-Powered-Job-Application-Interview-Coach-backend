@@ -7,7 +7,7 @@ export const createJob = async (req: Request, res: Response) => {
   if (!req.user) {
   return res.status(401).json({ error: "Unauthorized" });
 }
-  const userId = req.user.id;
+  const userId = req.user?.id;
   const { company, role, description } = req.body;
 
   const [job] = await db
@@ -22,7 +22,7 @@ export const getJobs = async (req: Request, res: Response) => {
    if (!req.user) {
   return res.status(401).json({ error: "Unauthorized" });
 }
-  const userId = req.user.id;
+  const userId = req.user?.id;
 
   const data = await db
     .select()
@@ -36,7 +36,7 @@ export const getJobById = async (req: Request, res: Response) => {
    if (!req.user) {
   return res.status(401).json({ error: "Unauthorized" });
 }
-  const userId = req.user.id;
+  const userId = req.user?.id;
   const { jobId } = req.params;
 
   const [job] = await db
@@ -50,7 +50,10 @@ export const getJobById = async (req: Request, res: Response) => {
 };
 
 export const updateJob = async (req: Request, res: Response) => {
-  const userId = req.user.id;
+   if (!req.user) {
+  return res.status(401).json({ error: "Unauthorized" });
+}
+  const userId = req.user?.id;
   const { jobId } = req.params;
 
   const [job] = await db
@@ -65,7 +68,10 @@ export const updateJob = async (req: Request, res: Response) => {
 };
 
 export const deleteJob = async (req: Request, res: Response) => {
-  const userId = req.user.id;
+   if (!req.user) {
+  return res.status(401).json({ error: "Unauthorized" });
+}
+  const userId = req.user?.id;
   const { jobId } = req.params;
 
   const [job] = await db
