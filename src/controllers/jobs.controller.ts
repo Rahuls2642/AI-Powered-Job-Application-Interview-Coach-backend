@@ -4,6 +4,9 @@ import { db } from "../db/index.js";
 import { jobs } from "../db/schema.js";
 
 export const createJob = async (req: Request, res: Response) => {
+  if (!req.user) {
+  return res.status(401).json({ error: "Unauthorized" });
+}
   const userId = req.user.id;
   const { company, role, description } = req.body;
 
@@ -16,6 +19,9 @@ export const createJob = async (req: Request, res: Response) => {
 };
 
 export const getJobs = async (req: Request, res: Response) => {
+   if (!req.user) {
+  return res.status(401).json({ error: "Unauthorized" });
+}
   const userId = req.user.id;
 
   const data = await db
@@ -27,6 +33,9 @@ export const getJobs = async (req: Request, res: Response) => {
 };
 
 export const getJobById = async (req: Request, res: Response) => {
+   if (!req.user) {
+  return res.status(401).json({ error: "Unauthorized" });
+}
   const userId = req.user.id;
   const { jobId } = req.params;
 

@@ -18,7 +18,7 @@ function parseQuestions(text: string) {
 
     const cleaned = line.replace(/^[-•\d.\sQ:]+/i, "").trim();
 
-    // Reduced to 5 to avoid losing short questions
+
     if (cleaned.length > 5) {
       result.push({
         category: currentCategory,
@@ -34,6 +34,9 @@ const interviewCacheKey = (userId: string, jobId: string) =>
 
 export const generateQuestions = async (req: Request, res: Response) => {
   try {
+     if (!req.user) {
+  return res.status(401).json({ error: "Unauthorized" });
+}
     const userId = req.user.id;
     const { jobId } = req.params;
     const cacheKey = interviewCacheKey(userId, jobId);
@@ -45,7 +48,7 @@ export const generateQuestions = async (req: Request, res: Response) => {
 
     if (!job) return res.status(404).json({ error: "Job not found" });
 
-    // AI Generation
+  
     const rawText = await generateInterviewQuestions(job.description);
     const parsed = parseQuestions(rawText);
 
@@ -53,7 +56,7 @@ export const generateQuestions = async (req: Request, res: Response) => {
       return res.status(500).json({ error: "AI returned no valid questions" });
     }
 
-    // INSERT without deleting existing ones
+    
     await db.insert(interviewQuestions).values(
       parsed.map(q => ({
         userId,
@@ -63,7 +66,7 @@ export const generateQuestions = async (req: Request, res: Response) => {
       }))
     );
 
-    // FETCH ALL (Old + New) to update frontend and cache
+    
     const updatedList = await db
       .select()
       .from(interviewQuestions)
@@ -87,6 +90,9 @@ export const generateQuestions = async (req: Request, res: Response) => {
 
 export const getQuestions = async (req: Request, res: Response) => {
   try {
+     if (!req.user) {
+  return res.status(401).json({ error: "Unauthorized" });
+}
     const userId = req.user.id;
     const { jobId } = req.params;
     const cacheKey = interviewCacheKey(userId, jobId);

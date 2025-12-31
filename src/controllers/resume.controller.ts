@@ -5,7 +5,7 @@ import { resumes } from "../db/schema.js";
 
 import { eq } from "drizzle-orm";
 
-import parsePdf from "../utils/pdfParse.cjs";
+import  parsePdf from "../utils/pdfParse.cjs";
 
 export const uploadResume = async (req: Request, res: Response) => {
   if (!req.user) {
