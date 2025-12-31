@@ -12,7 +12,6 @@ import reportsRoutes from './routes/report.routes.js';
 
 
 const app = express();
-app.use(cors())
 app.use(cors({
     origin:"https://interview-master-frontend.onrender.com",
     credentials: true,
