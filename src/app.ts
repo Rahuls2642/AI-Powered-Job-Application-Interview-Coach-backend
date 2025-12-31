@@ -1,7 +1,9 @@
 import express from "express";
 import cors from "cors";
+import { authMiddleware } from "./middleware/auth.middleware.js";
 
 import healthRoutes from './routes/health.routes.js';
+
 import authRoutes from './routes/auth.routes.js';
 import jobsRoutes from './routes/jobs.routes.js';
 import resumeRoutes from './routes/resume.routes.js';
@@ -22,7 +24,7 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use("/health", healthRoutes);
 app.use("/auth", authRoutes);
-app.use("/jobs", jobsRoutes);
+app.use("/jobs",authMiddleware, jobsRoutes);
 app.use("/resumes", resumeRoutes);
 app.use("/ats", atsRoutes);
 app.use("/interviews", interviewRoutes);
