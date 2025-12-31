@@ -14,7 +14,6 @@ import reportsRoutes from './routes/report.routes.js';
 const app = express();
 
 app.use(cors({
-    origin:"http://localhost:5173",
     origin:"https://interview-master-frontend.onrender.com",
     credentials: true,
 }));
