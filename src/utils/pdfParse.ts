@@ -1,4 +1,4 @@
-const PDFParse = require("pdf-parse");
+import { PDFParse } from 'pdf-parse';
 
 export default async function parsePdf(buffer:Buffer){
   try {
