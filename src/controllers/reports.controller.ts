@@ -10,72 +10,89 @@ const weakAreasKey = (userId: string) => `report:weak-areas:${userId}`;
 
 
 export const getOverviewReport = async (req: Request, res: Response) => {
-  if (!req.user) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-
-  const userId = req.user.id;
-  const cacheKey = overviewKey(userId);
-
   try {
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      console.log("⚡ overview cache HIT");
-      return res.json(JSON.parse(cached));
+    if (!req.user) {
+      return res.status(401).json({ error: "Unauthorized" });
     }
-  } catch {}
 
-  const allJobs = await db
-    .select()
-    .from(jobs)
-    .where(eq(jobs.userId, userId));
+    const userId = req.user.id;
+    const cacheKey = overviewKey(userId);
 
-  const ats = await db
-    .select()
-    .from(atsAnalysis)
-    .where(eq(atsAnalysis.userId, userId));
+    // 🟡 Redis is OPTIONAL
+    if (redis) {
+      try {
+        const cached = await redis.get(cacheKey);
+        if (cached) {
+          console.log("⚡ overview cache HIT");
+          return res.json(JSON.parse(cached));
+        }
+      } catch (e) {
+        console.warn("Redis read failed, continuing without cache");
+      }
+    }
 
-  const allAnswers = await db
-    .select()
-    .from(answers)
-    .where(eq(answers.userId, userId));
+    // 🟢 DB logic (authoritative source)
+    const allJobs = await db
+      .select()
+      .from(jobs)
+      .where(eq(jobs.userId, userId));
 
-  const jobStatusCount = allJobs.reduce<Record<string, number>>((acc, job) => {
-    const status = job.status ?? "unknown";
-    acc[status] = (acc[status] || 0) + 1;
-    return acc;
-  }, {});
+    const ats = await db
+      .select()
+      .from(atsAnalysis)
+      .where(eq(atsAnalysis.userId, userId));
 
-  const avgATS =
-    ats.length === 0
-      ? 0
-      : Math.round(
-          ats.reduce((sum, a) => sum + (a.matchScore ?? 0), 0) / ats.length
-        );
+    const allAnswers = await db
+      .select()
+      .from(answers)
+      .where(eq(answers.userId, userId));
 
-  const avgInterviewScore =
-    allAnswers.length === 0
-      ? 0
-      : Math.round(
-          allAnswers.reduce((sum, a) => sum + a.score, 0) /
-            allAnswers.length
-        );
+    const jobStatusCount = allJobs.reduce<Record<string, number>>(
+      (acc, job) => {
+        const status = job.status ?? "unknown";
+        acc[status] = (acc[status] || 0) + 1;
+        return acc;
+      },
+      {}
+    );
 
-  const result = {
-    totalJobs: allJobs.length,
-    jobsByStatus: jobStatusCount,
-    averageATSScore: avgATS,
-    averageInterviewScore: avgInterviewScore,
-    answersPracticed: allAnswers.length,
-  };
+    const avgATS =
+      ats.length === 0
+        ? 0
+        : Math.round(
+            ats.reduce((sum, a) => sum + (a.matchScore ?? 0), 0) / ats.length
+          );
 
-  try {
-    await redis.set(cacheKey, JSON.stringify(result), {
-      EX: 60, // 1 minute
-    });
-  } catch {}
+    const avgInterviewScore =
+      allAnswers.length === 0
+        ? 0
+        : Math.round(
+            allAnswers.reduce((sum, a) => sum + a.score, 0) /
+              allAnswers.length
+          );
 
-  res.json(result);
+    const result = {
+      totalJobs: allJobs.length,
+      jobsByStatus: jobStatusCount,
+      averageATSScore: avgATS,
+      averageInterviewScore: avgInterviewScore,
+      answersPracticed: allAnswers.length,
+    };
+
+    // 🟡 Cache write — best effort only
+    if (redis) {
+      try {
+        await redis.set(cacheKey, JSON.stringify(result), { EX: 60 });
+      } catch {
+        console.warn("Redis write failed");
+      }
+    }
+
+    res.json(result);
+  } catch (err) {
+    console.error("Overview report error:", err);
+    res.status(500).json({ error: "Failed to load overview report" });
+  }
 };
 
 
