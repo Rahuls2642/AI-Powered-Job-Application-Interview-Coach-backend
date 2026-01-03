@@ -6,5 +6,6 @@ const router = Router();
 
 router.use(authMiddleware);
 router.post("/analyze", analyzeATS);
+router.get("/:jobId", getATSByJob);
 
 export default router;
