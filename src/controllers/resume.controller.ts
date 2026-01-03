@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../db/index.js";
 import { resumes } from "../db/schema.js";
+import { atsAnalysis } from "../db/schema.js";
 
 
 import { eq } from "drizzle-orm";
@@ -34,6 +35,24 @@ export const uploadResume = async (req: Request, res: Response) => {
     message: "Resume uploaded successfully",
     resumeId: saved.id,
   });
+};
+export const getATSByJob = async (req: Request, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const { jobId } = req.params;
+
+  const [ats] = await db
+    .select()
+    .from(atsAnalysis)
+    .where(eq(atsAnalysis.jobId, jobId));
+
+  if (!ats) {
+    return res.status(404).json({ error: "ATS not found" });
+  }
+
+  res.json(ats);
 };
 
 export const getResumes = async (req: Request, res: Response) => {
