@@ -97,68 +97,86 @@ export const getOverviewReport = async (req: Request, res: Response) => {
 
 
 export const getATSProgress = async (req: Request, res: Response) => {
-  if (!req.user) {
-    return res.status(401).json({ error: "Unauthorized" });
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const userId = req.user.id;
+
+    const data = await db
+      .select({
+        score: atsAnalysis.matchScore,
+        createdAt: atsAnalysis.createdAt,
+      })
+      .from(atsAnalysis)
+      .where(eq(atsAnalysis.userId, userId))
+      .orderBy(atsAnalysis.createdAt);
+
+    res.json(data);
+  } catch (err) {
+    console.error("ATS progress error:", err);
+    res.status(500).json({ error: "Failed to load ATS progress" });
   }
-
-  const userId = req.user.id;
-
-  const data = await db
-    .select({
-      score: atsAnalysis.matchScore,
-      createdAt: atsAnalysis.createdAt,
-    })
-    .from(atsAnalysis)
-    .where(eq(atsAnalysis.userId, userId))
-    .orderBy(atsAnalysis.createdAt);
-
-  res.json(data);
 };
+
 
 
 export const getWeakAreas = async (req: Request, res: Response) => {
-  if (!req.user) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-
-  const userId = req.user.id;
-  const cacheKey = weakAreasKey(userId);
-
   try {
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      console.log("⚡ weak areas cache HIT");
-      return res.json(JSON.parse(cached));
+    if (!req.user) {
+      return res.status(401).json({ error: "Unauthorized" });
     }
-  } catch {}
 
-  const ats = await db
-    .select()
-    .from(atsAnalysis)
-    .where(eq(atsAnalysis.userId, userId));
+    const userId = req.user.id;
+    const cacheKey = weakAreasKey(userId);
 
-  const keywordFrequency: Record<string, number> = {};
+    if (redis) {
+      try {
+        const cached = await redis.get(cacheKey);
+        if (cached) {
+          console.log("⚡ weak areas cache HIT");
+          return res.json(JSON.parse(cached));
+        }
+      } catch {
+        console.warn("Redis read failed");
+      }
+    }
 
-  ats.forEach(a => {
-    if (!a.missingKeywords) return;
-    a.missingKeywords.split(",").forEach(k => {
-      const key = k.trim().toLowerCase();
-      if (!key) return;
-      keywordFrequency[key] = (keywordFrequency[key] || 0) + 1;
+    const ats = await db
+      .select()
+      .from(atsAnalysis)
+      .where(eq(atsAnalysis.userId, userId));
+
+    const keywordFrequency: Record<string, number> = {};
+
+    ats.forEach(a => {
+      if (!a.missingKeywords || typeof a.missingKeywords !== "string") return;
+
+      a.missingKeywords.split(",").forEach(k => {
+        const key = k.trim().toLowerCase();
+        if (!key) return;
+        keywordFrequency[key] = (keywordFrequency[key] || 0) + 1;
+      });
     });
-  });
 
-  const result = Object.entries(keywordFrequency)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([skill, count]) => ({ skill, count }));
+    const result = Object.entries(keywordFrequency)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([skill, count]) => ({ skill, count }));
 
-  
-  try {
-    await redis.set(cacheKey, JSON.stringify(result), {
-      EX: 300, 
-    });
-  } catch {}
+    if (redis) {
+      try {
+        await redis.set(cacheKey, JSON.stringify(result), { EX: 300 });
+      } catch {
+        console.warn("Redis write failed");
+      }
+    }
 
-  res.json(result);
+    res.json(result);
+  } catch (err) {
+    console.error("Weak areas error:", err);
+    res.status(500).json({ error: "Failed to load weak areas" });
+  }
 };
+
